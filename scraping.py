@@ -116,11 +116,15 @@ def findEmail(driver:Chrome, doc:Provider) -> str:
     locator = (By.XPATH, f'//input[@aria-label="To"]')
     WebDriverWait(driver, 20).until(ec.presence_of_element_located(locator))
     textInput:WebElement = driver.find_element(*locator)
+    textInput.clear()
     textInput.send_keys(doc.name)
     with open("outlook.html", "w") as file:
         file.write(email_driver.page_source)
     locator = (By.XPATH, f'//span[contains(.,"{doc.name}")]')
-    WebDriverWait(driver, 5).until(ec.presence_of_element_located(locator))
+    try:
+        WebDriverWait(driver, 5).until(ec.presence_of_element_located(locator))
+    except:
+        return 'notfound'
     form:WebElement = driver.find_element(*locator)
     for child in form.parent.find_elements(By.XPATH, "./child::*"):
         if doc.name in child.text: continue
