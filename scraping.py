@@ -1,8 +1,9 @@
 from bs4.element import ResultSet, Tag
 from selenium import webdriver
 from selenium.webdriver import Chrome, ChromeOptions
-from selenium.webdriver.common.by import By 
-from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote import webelement 
+from selenium.webdriver.support import expected_conditions as ec, wait
 from selenium.webdriver.support.ui import WebDriverWait
 from bs4 import BeautifulSoup as bs
 import time
@@ -12,6 +13,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from provider import Provider
 import json
 import os.path as path
+import csv
 
 def findResults(content:str) -> List[Provider]:
     soup = soup = bs(content, features='lxml')
@@ -106,43 +108,81 @@ def confirmIdentity(driver:Chrome, email:str):
     profile:WebElement = driver.find_element(*locator)
     profile.click()
 
-def newEmail(driver:Chrome):
+def newEmail(driver:Chrome) -> WebElement:
     locator = (By.XPATH, f'//button/span/span/span[contains(text(),"New message")]')
     WebDriverWait(driver, 20).until(ec.presence_of_element_located(locator))
     button:WebElement = driver.find_element(*locator)
     button.click()
-
-def findEmail(driver:Chrome, doc:Provider) -> str:
     locator = (By.XPATH, f'//input[@aria-label="To"]')
     WebDriverWait(driver, 20).until(ec.presence_of_element_located(locator))
     textInput:WebElement = driver.find_element(*locator)
+    return textInput
+    
+
+def findEmail(doc:Provider):
     textInput.clear()
-    textInput.send_keys(doc.name)
-    with open("outlook.html", "w") as file:
-        file.write(email_driver.page_source)
-    locator = (By.XPATH, f'//span[contains(.,"{doc.name}")]')
+    name = adjustName(doc.name)
+    textInput.send_keys(name)
+    textInput.click()
+    locator = (By.XPATH, f'//span[contains(text(),"@unchealth.unc.edu") or contains(text(), "@med.unc.edu")]')
     try:
-        WebDriverWait(driver, 5).until(ec.presence_of_element_located(locator))
+        time.sleep(2)
+        WebDriverWait(email_driver, 1).until(ec.presence_of_element_located(locator))
+        elements:List[WebElement] = email_driver.find_elements(*locator)
+        parseElements(doc, elements)
     except:
-        return 'notfound'
-    form:WebElement = driver.find_element(*locator)
-    for child in form.parent.find_elements(By.XPATH, "./child::*"):
-        if doc.name in child.text: continue
-        doc.email = child.text
-        break
-    if doc.email == '':
-        print('error')
+        print(f'{name}: notfound')
+        doc.email = 'notfound'
+    
+def parseElements(doc:Provider, elements:List[WebElement]):
+    emails = []
+    lower:str = doc.name.split(" ")[-1].split('-')[0].lower()
+    for element in elements:
+        text = element.text
+        if lower not in text and lower.capitalize() not in text: 
+            print(f'{doc.name}: {text}')
+            continue
+        emails.append(text)
+        if len(emails) == 0:
+            doc.email = 'notmatching'
+        elif len(emails) == 1:
+            doc.email = emails[0]
+        else:
+            doc.email = f"\"{','.join(emails)}\""
+    print(f'{doc.name}: {doc.email}')
+
+
+def adjustName(name:str) -> str:
+    names = name.split(' ')
+    i = 0
+    while (i < len(names)):
+        c = names[i]
+        update = c.replace('.', '')
+        if len(update) <= 1:
+            names.pop(i)
+        else:
+            i+=1
+    if len(names) == 1: 
+        return name
+    return f'{names[0]} {names[-1]}'
+        
 
 email_driver = outlook('tylero@ad.unc.edu')
-newEmail(email_driver)
+textInput = newEmail(email_driver)
 
-unc_driver = firstPage()
-with open('output.csv', 'w') as file:
-    for page in range(352):
-        docs:List[Provider] = findResults(unc_driver.page_source)
-        for doc in docs:
-            doc.email = findEmail(email_driver, doc)
-            print(f'{doc}')
-            file.write(f'{doc}\n')
-            file.flush()
-        nextPage(unc_driver)
+with open('output.csv', 'w') as output:
+    with open('records.csv', 'r') as records:
+        reader = csv.reader(records)
+        i = 1
+        for info in reader:
+            if i % 100 == 0:
+                print(f"Current Step: {i}")
+            doc = Provider()
+            doc.name = info[0]
+            doc.degree = info[1]
+            doc.loc = info[2]
+            doc.site = info[5]
+            findEmail(doc)
+            output.write(f'{doc}\n')
+            output.flush()
+            i+=1
