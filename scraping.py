@@ -87,6 +87,8 @@ def outlook(email:str) -> Chrome:
     options_path = path.join(path.dirname(__file__), 'chromeprofile/')
     options = ChromeOptions()
     options.add_argument(f'user-data-dir={options_path}')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
     driver = Chrome(options=options)
     driver.get(page)
     #confirmIdentity(driver, email)
@@ -115,6 +117,8 @@ def findEmail(driver:Chrome, doc:Provider) -> str:
     WebDriverWait(driver, 20).until(ec.presence_of_element_located(locator))
     textInput:WebElement = driver.find_element(*locator)
     textInput.send_keys(doc.name)
+    with open("outlook.html", "w") as file:
+        file.write(email_driver.page_source)
     locator = (By.XPATH, f'//span[contains(.,"{doc.name}")]')
     WebDriverWait(driver, 5).until(ec.presence_of_element_located(locator))
     form:WebElement = driver.find_element(*locator)
@@ -126,15 +130,15 @@ def findEmail(driver:Chrome, doc:Provider) -> str:
         print('error')
 
 email_driver = outlook('tylero@ad.unc.edu')
-with open("outlook.html", "w") as file:
-    file.write(email_driver.page_source)
 newEmail(email_driver)
 
 unc_driver = firstPage()
-with open('output.csv', 'x') as file:
+with open('output.csv', 'w') as file:
     for page in range(352):
         docs:List[Provider] = findResults(unc_driver.page_source)
         for doc in docs:
             doc.email = findEmail(email_driver, doc)
+            print(f'{doc}')
             file.write(f'{doc}\n')
+            file.flush()
         nextPage(unc_driver)
